@@ -1,5 +1,7 @@
 module GraphQL.Request.Document.AST exposing (..)
 
+import Json.Encode as Encode
+
 
 type Document
     = Document (List Definition)
@@ -69,24 +71,25 @@ type alias FragmentDefinitionInfo =
     }
 
 
-type Value variableConstraint
+type Value variableConstraint a
     = VariableValue variableConstraint String
     | IntValue Int
     | FloatValue Float
     | StringValue String
     | BooleanValue Bool
+    | AnyValue (a -> Encode.Value) a
     | NullValue
     | EnumValue String
-    | ListValue (List (Value variableConstraint))
-    | ObjectValue (List ( String, Value variableConstraint ))
+    | ListValue (List (Value variableConstraint Never))
+    | ObjectValue (List ( String, Value variableConstraint Never ))
 
 
-type alias ConstantValue =
-    Value Never
+type alias ConstantValue a =
+    Value Never a
 
 
 type alias ArgumentValue =
-    Value ()
+    Value () Never
 
 
 type VariableDefinition
@@ -96,7 +99,7 @@ type VariableDefinition
 type alias VariableDefinitionInfo =
     { name : String
     , variableType : TypeRef
-    , defaultValue : Maybe ConstantValue
+    , defaultValue : Maybe (ConstantValue Never)
     }
 
 

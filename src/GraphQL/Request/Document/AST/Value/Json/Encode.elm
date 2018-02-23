@@ -5,7 +5,7 @@ import Json.Encode as Json
 import Tuple
 
 
-encode : AST.ConstantValue -> Json.Value
+encode : AST.ConstantValue Never -> Json.Value
 encode value =
     case value of
         AST.VariableValue _ _ ->
@@ -22,6 +22,9 @@ encode value =
 
         AST.BooleanValue bool ->
             Json.bool bool
+
+        AST.AnyValue encode value ->
+            encode value
 
         AST.NullValue ->
             Json.null

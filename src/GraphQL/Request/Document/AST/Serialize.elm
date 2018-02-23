@@ -86,7 +86,7 @@ serializeTypeRef (AST.TypeRef nullability coreTypeRef) =
     serializeCoreTypeRef coreTypeRef ++ serializeNullability nullability
 
 
-serializeDefaultValue : AST.ConstantValue -> String
+serializeDefaultValue : AST.ConstantValue Never -> String
 serializeDefaultValue value =
     "= " ++ serializeValue value
 
@@ -111,7 +111,7 @@ serializeCoreTypeRef coreTypeRef =
             "[" ++ (serializeTypeRef typeRef) ++ "]"
 
 
-serializeValue : AST.Value variableConstraint -> String
+serializeValue : AST.Value variableConstraint Never -> String
 serializeValue value =
     case value of
         AST.VariableValue _ name ->
@@ -125,6 +125,9 @@ serializeValue value =
 
         AST.StringValue string ->
             toString string
+
+        AST.AnyValue _ value ->
+            toString value
 
         AST.BooleanValue True ->
             "true"
@@ -145,7 +148,7 @@ serializeValue value =
             "{" ++ String.join ", " (List.map serializeKeyValuePair pairs) ++ "}"
 
 
-serializeKeyValuePair : ( String, AST.Value variableConstraint ) -> String
+serializeKeyValuePair : ( String, AST.Value variableConstraint Never ) -> String
 serializeKeyValuePair ( key, value ) =
     key ++ ": " ++ serializeValue value
 

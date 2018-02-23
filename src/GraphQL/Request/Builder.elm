@@ -140,7 +140,7 @@ type Request operationType result
     = Request
         { documentAST : AST.Document
         , documentString : String
-        , variableValues : List ( String, AST.ConstantValue )
+        , variableValues : List ( String, AST.ConstantValue Never )
         , responseDataDecoder : Decoder result
         }
 
@@ -363,7 +363,7 @@ requestBody (Request { documentString }) =
     documentString
 
 
-variableValuesToJson : List ( String, AST.ConstantValue ) -> Maybe Encode.Value
+variableValuesToJson : List ( String, AST.ConstantValue Never ) -> Maybe Encode.Value
 variableValuesToJson kvPairs =
     if List.isEmpty kvPairs then
         Nothing

@@ -20,7 +20,7 @@ type Request operations result
     = Request
         { document : Document
         , operationName : Maybe String
-        , variableValues : List ( String, AST.ConstantValue )
+        , variableValues : List ( String, AST.ConstantValue Never )
         , decoder : Decoder result
         }
 

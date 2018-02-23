@@ -26,16 +26,18 @@ module GraphQL.Request.Builder.Variable
 {-| The functions in this module let you define GraphQL variables that you can pass as arguments in your request documents built with the functions in [`GraphQL.Request.Builder`](GraphQL-Request-Builder).
 
 @docs VariableSpec, Nullable, NonNull, Variable, Field, required, optional, int, float, string, bool, id, enum, nullable, list, object, field, optionalField, name, toDefinitionAST, extractValuesFrom
+
 -}
 
 import GraphQL.Request.Document.AST as AST
 import GraphQL.Request.Builder.TypeRef as TypeRef exposing (TypeRef)
+import Json.Encode exposing (Value)
 
 
 {-| A specification for the type of a `Variable` which includes enough information to extract a conforming value from an Elm value.
 -}
-type VariableSpec nullability source
-    = VariableSpec nullability TypeRef (source -> AST.ConstantValue)
+type VariableSpec nullability source a
+    = VariableSpec nullability TypeRef (source -> AST.ConstantValue a)
 
 
 {-| This type is used as a marker for the `VariableSpec` type's `nullability` parameter to indicate that the described GraphQL variable may be filled with a `null` value.
@@ -53,63 +55,74 @@ type NonNull
 {-| This type represents a GraphQL variable definition, and includes enough information to extract a conforming GraphQL value from some arbitrary `source` type supplied by your Elm code.
 -}
 type Variable source
-    = RequiredVariable String TypeRef (source -> AST.ConstantValue)
-    | OptionalVariable String TypeRef (source -> Maybe AST.ConstantValue) AST.ConstantValue
+    = RequiredVariable String TypeRef (source -> AST.ConstantValue Never)
+    | OptionalVariable String TypeRef (source -> Maybe (AST.ConstantValue Never)) (AST.ConstantValue Never)
 
 
 {-| Describes a single field of a GraphQL Input Object type.
 -}
 type Field source
-    = Field String TypeRef (source -> Maybe AST.ConstantValue)
+    = Field String TypeRef (source -> Maybe (AST.ConstantValue Never))
 
 
-{-| Construct a `Variable` that has no default value, and therefore must extract its value from a `source`. The first argument is the name of the variable that appears in the GraphQL request document, and must be unique for that document. It should _not_ include any leading dollar sign (`$`). The second argument is a function that extracts a value of the required type from a `source`. The third argument is a `VariableSpec` that describes the type of the variable.
+{-| Construct a `Variable` that has no default value, and therefore must extract its value from a `source`. The first argument is the name of the variable that appears in the GraphQL request document, and must be unique for that document. It should *not* include any leading dollar sign (`$`). The second argument is a function that extracts a value of the required type from a `source`. The third argument is a `VariableSpec` that describes the type of the variable.
 -}
-required : String -> (source -> a) -> VariableSpec nullability a -> Variable source
+required : String -> (source -> a) -> VariableSpec nullability a Never -> Variable source
 required name extract (VariableSpec _ typeRef convert) =
     RequiredVariable name typeRef (extract >> convert)
 
 
 {-| Construct a `Variable` that has a default value, and therefore its `source` may or may not provide a value for it. The first three arguments are the same as for the `required` function, except that the function to extract a value from `source` must return a `Maybe` of the type expected by the `VariableSpec`. The last argument is a default value for the variable.
 
-Note that the `VariableSpec` may be either `Nullable` or `NonNull`, but in both cases the variable definition is serialized _without_ a Non-Null modifier in the GraphQL request document, because optional variables may not be Non-Null in GraphQL. If you pass a `NonNull` `VariableSpec` into this function, it just means that you won't be able to represent an explicit `null` for the variable's value. If instead you pass a `Nullable` `VariableSpec` into this function, you will be able to represent an explicit `null` value for the variable, but you'll also have to deal with double-wrapped `Maybe` values – a missing value is then represented as a `Nothing` returned from your extraction function, and a `null` value is represented as `Just Nothing`. For this reason, it is recommended that you stick to `NonNull` `VariableSpec` values here unless you really need to be able to pass `null` explictly to the GraphQL server.
+Note that the `VariableSpec` may be either `Nullable` or `NonNull`, but in both cases the variable definition is serialized *without* a Non-Null modifier in the GraphQL request document, because optional variables may not be Non-Null in GraphQL. If you pass a `NonNull` `VariableSpec` into this function, it just means that you won't be able to represent an explicit `null` for the variable's value. If instead you pass a `Nullable` `VariableSpec` into this function, you will be able to represent an explicit `null` value for the variable, but you'll also have to deal with double-wrapped `Maybe` values – a missing value is then represented as a `Nothing` returned from your extraction function, and a `null` value is represented as `Just Nothing`. For this reason, it is recommended that you stick to `NonNull` `VariableSpec` values here unless you really need to be able to pass `null` explictly to the GraphQL server.
+
 -}
-optional : String -> (source -> Maybe a) -> VariableSpec nullability a -> a -> Variable source
+optional : String -> (source -> Maybe a) -> VariableSpec nullability a Never -> a -> Variable source
 optional name extractMaybe (VariableSpec nullability typeRef convert) defaultValue =
     OptionalVariable name (TypeRef.nullable typeRef) (extractMaybe >> Maybe.map convert) (convert defaultValue)
 
 
 {-| A `VariableSpec` for the GraphQL `Int` type that extracts its value from an Elm `Int`.
 -}
-int : VariableSpec NonNull Int
+int : VariableSpec NonNull Int Never
 int =
     VariableSpec NonNull TypeRef.int AST.IntValue
 
 
 {-| A `VariableSpec` for the GraphQL `Float` type that extracts its value from an Elm `Float`.
 -}
-float : VariableSpec NonNull Float
+float : VariableSpec NonNull Float Never
 float =
     VariableSpec NonNull TypeRef.float AST.FloatValue
 
 
 {-| A `VariableSpec` for the GraphQL `String` type that extracts its value from an Elm `String`.
 -}
-string : VariableSpec NonNull String
+string : VariableSpec NonNull String Never
 string =
     VariableSpec NonNull TypeRef.string AST.StringValue
 
 
 {-| A `VariableSpec` for the GraphQL `Boolean` type that extracts its value from an Elm `Bool`.
 -}
-bool : VariableSpec NonNull Bool
+bool : VariableSpec NonNull Bool Never
 bool =
     VariableSpec NonNull TypeRef.boolean AST.BooleanValue
 
 
+{-| A `VariableSpec` for the GraphQL Custom Scalar type that extracts its value from the submitted Elm value.
+-}
+customScalar : String -> (a -> Value) -> VariableSpec NonNull a a
+customScalar name encode =
+    VariableSpec
+        NonNull
+        (TypeRef.namedType name)
+        (AST.AnyValue encode)
+
+
 {-| A `VariableSpec` for the GraphQL `ID` type that extracts its value from an Elm `String`.
 -}
-id : VariableSpec NonNull String
+id : VariableSpec NonNull String Never
 id =
     VariableSpec NonNull TypeRef.id AST.StringValue
 
@@ -132,15 +145,16 @@ id =
     accessLevel : VariableSpec NonNull AccessLevel
     accessLevel =
         enum "AccessLevel" accessLevelToEnumSymbol
+
 -}
-enum : String -> (source -> String) -> VariableSpec NonNull source
+enum : String -> (source -> String) -> VariableSpec NonNull source Never
 enum typeName convert =
     VariableSpec NonNull (TypeRef.namedType typeName) (convert >> AST.EnumValue)
 
 
 {-| Transforms a `NonNull` `VariableSpec` into one that allows `null` values, extracting its value from a `Maybe`.
 -}
-nullable : VariableSpec NonNull source -> VariableSpec Nullable (Maybe source)
+nullable : VariableSpec NonNull source Never -> VariableSpec Nullable (Maybe source) Never
 nullable (VariableSpec NonNull typeRef convert) =
     VariableSpec
         Nullable
@@ -150,7 +164,7 @@ nullable (VariableSpec NonNull typeRef convert) =
 
 {-| Constructs a `VariableSpec` for a GraphQL List type out of another `VariableSpec` that represents its items.
 -}
-list : VariableSpec nullability source -> VariableSpec NonNull (List source)
+list : VariableSpec nullability source Never -> VariableSpec NonNull (List source) Never
 list (VariableSpec _ typeRef convert) =
     VariableSpec
         NonNull
@@ -174,8 +188,9 @@ list (VariableSpec _ typeRef convert) =
                 , field "email" .email string
                 ]
             )
+
 -}
-object : String -> List (Field source) -> VariableSpec NonNull source
+object : String -> List (Field source) -> VariableSpec NonNull source Never
 object typeName fields =
     VariableSpec
         NonNull
@@ -188,7 +203,7 @@ object typeName fields =
 field :
     String
     -> (objVariableSource -> fieldVariableSource)
-    -> VariableSpec nullability fieldVariableSource
+    -> VariableSpec nullability fieldVariableSource Never
     -> Field objVariableSource
 field name extract (VariableSpec _ typeRef convert) =
     Field name typeRef (extract >> convert >> Just)
@@ -216,23 +231,24 @@ In the following example, both the `phoneNumber` and `email` fields are optional
                 , optionalField "phoneNumber" .phoneNumber (nullable string)
                 ]
             )
+
 -}
 optionalField :
     String
     -> (objVariableSource -> Maybe fieldVariableSource)
-    -> VariableSpec nullability fieldVariableSource
+    -> VariableSpec nullability fieldVariableSource Never
     -> Field objVariableSource
 optionalField name extract (VariableSpec _ typeRef convert) =
     Field name typeRef (extract >> Maybe.map convert)
 
 
-fieldTuple : source -> Field source -> Maybe ( String, AST.ConstantValue )
+fieldTuple : source -> Field source -> Maybe ( String, AST.ConstantValue Never )
 fieldTuple source (Field name _ convert) =
     convert source
         |> Maybe.map (\value -> ( name, value ))
 
 
-valueFromSource : source -> Variable source -> Maybe ( String, AST.ConstantValue )
+valueFromSource : source -> Variable source -> Maybe ( String, AST.ConstantValue Never )
 valueFromSource source var =
     case var of
         RequiredVariable _ _ f ->
@@ -281,6 +297,6 @@ toDefinitionAST var =
 
 {-| Extracts generic values from a `source` and a `List` of zero or more compatible `Variable`s.
 -}
-extractValuesFrom : source -> List (Variable source) -> List ( String, AST.ConstantValue )
+extractValuesFrom : source -> List (Variable source) -> List ( String, AST.ConstantValue Never )
 extractValuesFrom source vars =
     List.filterMap (valueFromSource source) vars
